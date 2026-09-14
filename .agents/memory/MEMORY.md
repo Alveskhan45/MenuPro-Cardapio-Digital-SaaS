@@ -1,0 +1,1 @@
+- [Drizzle PostgreSQL arrays](drizzle-postgres-arrays.md) — use Drizzle's `inArray` for dynamic ID lists instead of interpolating `ANY` expressions.

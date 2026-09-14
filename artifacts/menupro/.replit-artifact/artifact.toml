@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "MenuPro — Cardápio Digital"
+description = "SaaS brasileiro para restaurantes criarem cardápios digitais, receberem pedidos e compartilharem seu menu por link, QR Code e WhatsApp."
+version = "1.0.0"
+id = "artifacts/menupro"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19612
+
+[services.development]
+run = "pnpm --filter @workspace/menupro run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/menupro", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/menupro/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19612"
+BASE_PATH = "/"

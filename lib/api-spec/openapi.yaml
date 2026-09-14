@@ -10,6 +10,16 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: restaurant
+    description: Restaurant profile and dashboard data
+  - name: catalog
+    description: Categories and products
+  - name: orders
+    description: Orders and order status
+  - name: customers
+    description: Customer records
+  - name: public-menu
+    description: Public menu and checkout
 paths:
   /healthz:
     get:
@@ -24,7 +34,308 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /restaurant:
+    get:
+      operationId: getRestaurant
+      tags: [restaurant]
+      summary: Get the current restaurant
+      responses:
+        "200":
+          description: Restaurant profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Restaurant"
+    patch:
+      operationId: updateRestaurant
+      tags: [restaurant]
+      summary: Update the current restaurant profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestaurantUpdate"
+      responses:
+        "200":
+          description: Updated restaurant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Restaurant"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [restaurant]
+      summary: Get dashboard summary metrics
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [catalog]
+      summary: List restaurant categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [catalog]
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Created category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+  /categories/{categoryId}:
+    patch:
+      operationId: updateCategory
+      tags: [catalog]
+      summary: Update a category
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    delete:
+      operationId: deleteCategory
+      tags: [catalog]
+      summary: Delete a category
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      responses:
+        "204":
+          description: Category deleted
+  /products:
+    get:
+      operationId: listProducts
+      tags: [catalog]
+      summary: List restaurant products
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, active, inactive]
+      responses:
+        "200":
+          description: Products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [catalog]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+  /products/{productId}:
+    patch:
+      operationId: updateProduct
+      tags: [catalog]
+      summary: Update a product
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [catalog]
+      summary: Delete a product
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "204":
+          description: Product deleted
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List restaurant orders
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, new, confirmed, preparing, ready, delivering, completed, cancelled]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+  /orders/{orderId}/status:
+    patch:
+      operationId: updateOrderStatus
+      tags: [orders]
+      summary: Update an order status
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderStatusInput"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List restaurant customers
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+  /menu/{slug}:
+    get:
+      operationId: getPublicMenu
+      tags: [public-menu]
+      summary: Get a public menu by slug
+      parameters:
+        - $ref: "#/components/parameters/MenuSlug"
+      responses:
+        "200":
+          description: Public menu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicMenu"
+        "404":
+          description: Menu not found
+  /menu/{slug}/orders:
+    post:
+      operationId: createPublicOrder
+      tags: [public-menu]
+      summary: Place an order from a public menu
+      parameters:
+        - $ref: "#/components/parameters/MenuSlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicOrderInput"
+      responses:
+        "201":
+          description: Created order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderConfirmation"
 components:
+  parameters:
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: integer
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: integer
+    MenuSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +344,247 @@ components:
           type: string
       required:
         - status
+    Restaurant:
+      type: object
+      required: [id, name, slug, description, phone, whatsapp, city, state, isOpen, isPublished, primaryColor, secondaryColor]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        phone: { type: string }
+        whatsapp: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        logoUrl: { type: ["string", "null"] }
+        bannerUrl: { type: ["string", "null"] }
+        primaryColor: { type: string }
+        secondaryColor: { type: string }
+        isOpen: { type: boolean }
+        isPublished: { type: boolean }
+    RestaurantUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        phone: { type: string }
+        whatsapp: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        primaryColor: { type: string }
+        secondaryColor: { type: string }
+        isPublished: { type: boolean }
+    DashboardSummary:
+      type: object
+      required: [ordersToday, salesToday, pendingOrders, productsCount, customersCount, menuViews, weeklySales, recentOrders, topProducts]
+      properties:
+        ordersToday: { type: integer }
+        salesToday: { type: number }
+        pendingOrders: { type: integer }
+        productsCount: { type: integer }
+        customersCount: { type: integer }
+        menuViews: { type: integer }
+        weeklySales:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalesPoint"
+        recentOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        topProducts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopProduct"
+    SalesPoint:
+      type: object
+      required: [label, value]
+      properties:
+        label: { type: string }
+        value: { type: number }
+    Category:
+      type: object
+      required: [id, name, description, isActive, productCount, position]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        imageUrl: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        productCount: { type: integer }
+        position: { type: integer }
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        imageUrl: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        position: { type: integer }
+    Product:
+      type: object
+      required: [id, categoryId, categoryName, name, description, price, promotionalPrice, imageUrl, isActive, isFeatured, available, position, addonGroups]
+      properties:
+        id: { type: integer }
+        categoryId: { type: integer }
+        categoryName: { type: string }
+        name: { type: string }
+        description: { type: string }
+        price: { type: number }
+        promotionalPrice: { type: ["number", "null"] }
+        imageUrl: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        isFeatured: { type: boolean }
+        available: { type: boolean }
+        position: { type: integer }
+        addonGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/AddonGroup"
+    ProductInput:
+      type: object
+      required: [categoryId, name, description, price]
+      properties:
+        categoryId: { type: integer }
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        promotionalPrice: { type: ["number", "null"], minimum: 0 }
+        imageUrl: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        isFeatured: { type: boolean }
+        available: { type: boolean }
+        position: { type: integer }
+    AddonGroup:
+      type: object
+      required: [id, name, required, min, max, items]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        required: { type: boolean }
+        min: { type: integer }
+        max: { type: integer }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Addon"
+    Addon:
+      type: object
+      required: [id, name, price]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        price: { type: number }
+    Order:
+      type: object
+      required: [id, number, customerName, customerWhatsapp, time, total, orderType, status, items, paymentMethod]
+      properties:
+        id: { type: integer }
+        number: { type: string }
+        customerName: { type: string }
+        customerWhatsapp: { type: string }
+        time: { type: string }
+        total: { type: number }
+        orderType:
+          type: string
+          enum: [delivery, pickup, dine_in]
+        status:
+          type: string
+          enum: [new, confirmed, preparing, ready, delivering, completed, cancelled]
+        paymentMethod: { type: string }
+        address: { type: ["string", "null"] }
+        note: { type: ["string", "null"] }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+    OrderItem:
+      type: object
+      required: [name, quantity, price, subtotal]
+      properties:
+        name: { type: string }
+        quantity: { type: integer }
+        price: { type: number }
+        subtotal: { type: number }
+        addons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Addon"
+    OrderStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [new, confirmed, preparing, ready, delivering, completed, cancelled]
+    Customer:
+      type: object
+      required: [id, name, whatsapp, ordersCount, totalSpent, lastOrderAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        whatsapp: { type: string }
+        ordersCount: { type: integer }
+        totalSpent: { type: number }
+        lastOrderAt: { type: string }
+    TopProduct:
+      type: object
+      required: [id, name, quantity, revenue, imageUrl]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        quantity: { type: integer }
+        revenue: { type: number }
+        imageUrl: { type: ["string", "null"] }
+    PublicMenu:
+      type: object
+      required: [restaurant, categories, products]
+      properties:
+        restaurant:
+          $ref: "#/components/schemas/Restaurant"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+    PublicOrderInput:
+      type: object
+      required: [customerName, customerWhatsapp, orderType, paymentMethod, items]
+      properties:
+        customerName: { type: string, minLength: 1 }
+        customerWhatsapp: { type: string, minLength: 8 }
+        orderType:
+          type: string
+          enum: [delivery, pickup, dine_in]
+        paymentMethod: { type: string }
+        address: { type: string }
+        note: { type: string }
+        changeFor: { type: ["number", "null"] }
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PublicOrderItemInput"
+    PublicOrderItemInput:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: integer }
+        quantity: { type: integer, minimum: 1 }
+        addonIds:
+          type: array
+          items: { type: integer }
+    OrderConfirmation:
+      type: object
+      required: [order, whatsappUrl]
+      properties:
+        order:
+          $ref: "#/components/schemas/Order"
+        whatsappUrl: { type: string }
 
