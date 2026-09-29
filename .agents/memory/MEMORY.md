@@ -1,2 +1,3 @@
 - [Drizzle PostgreSQL arrays](drizzle-postgres-arrays.md) — use Drizzle's `inArray` for dynamic ID lists instead of interpolating `ANY` expressions.
 - [Shared demo data ownership](shared-demo-data-ownership.md) — never assign ownerless demo restaurant data to the first Clerk signup without an explicit owner mapping.
+- [Package installation in the monorepo](monorepo-package-install.md) — target leaf artifact dependencies with a pnpm workspace filter if the Replit installer targets the root.

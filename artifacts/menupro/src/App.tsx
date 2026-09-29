@@ -1,11 +1,11 @@
-import { type ButtonHTMLAttributes, type ComponentType, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useMemo, useState } from 'react';
+import { type ButtonHTMLAttributes, type ComponentType, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk, useUser } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import {
   ArrowRight, BarChart3, Bell, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleAlert, CircleCheck, Clock3, Copy, ExternalLink, Eye, Facebook, Flame, FolderOpen,
+  CircleAlert, CircleCheck, Clock3, Copy, Download, ExternalLink, Eye, Facebook, Flame, FolderOpen,
   Gauge, Globe2, Grid2X2, HelpCircle, ImagePlus, Instagram, LayoutDashboard, Link2,
   LogOut, MapPin, Menu, MessageCircle, MoreHorizontal, Package, Palette, Pencil, Plus,
   QrCode, Receipt, Search, Settings2, Share2, ShoppingBag, Store, Tag, Trash2, TrendingUp,
@@ -24,6 +24,7 @@ import {
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { QRCodeCanvas } from 'qrcode.react';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -241,7 +242,176 @@ function CustomerRow({ customer }: { customer: Customer }) { return <tr classNam
 
 function RestaurantForm({ mode }: { mode: 'appearance' | 'settings' }) { const { data, isLoading, isError } = useGetRestaurant({ query: { queryKey: getGetRestaurantQueryKey() } }); const update = useUpdateRestaurant(); const [form, setForm] = useState<Partial<Restaurant>>({}); const values = { ...data, ...form }; if (isLoading) return <Loading lines={4} />; if (isError || !data) return <ErrorState />; const save = () => update.mutate({ data: { name: values.name, description: values.description, phone: values.phone, whatsapp: values.whatsapp, address: values.address, city: values.city, state: values.state, primaryColor: values.primaryColor, secondaryColor: values.secondaryColor, isPublished: values.isPublished } }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetRestaurantQueryKey() }) }); return <><PageTitle eyebrow={mode === 'appearance' ? 'sua marca' : 'administração'} title={mode === 'appearance' ? 'Aparência' : 'Configurações'} description={mode === 'appearance' ? 'Seu cardápio deve ter a cara da sua casa.' : 'Mantenha os dados da sua operação sempre em dia.'} action={<Button onClick={save} disabled={update.isPending} data-testid="button-save-restaurant">{update.isPending ? 'Salvando...' : <><Check size={16} /> Salvar alterações</>}</Button>} /><div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]"><div className="surface rounded-2xl p-5 sm:p-7">{mode === 'appearance' ? <><h2 className="font-bold">Identidade do cardápio</h2><p className="mt-1 text-sm text-muted-foreground">Escolha o que seus clientes vão sentir ao abrir o link.</p><div className="mt-6 grid gap-4"><Field label="Nome exibido" value={values.name ?? ''} onChange={e => setForm({ ...form, name: e.target.value })} data-testid="input-restaurant-name" /><TextArea label="Descrição curta" value={values.description ?? ''} onChange={e => setForm({ ...form, description: e.target.value })} data-testid="input-restaurant-description" /><div className="grid gap-4 sm:grid-cols-2"><Field label="Cor principal" type="text" value={values.primaryColor ?? ''} onChange={e => setForm({ ...form, primaryColor: e.target.value })} data-testid="input-primary-color" /><Field label="Cor de apoio" type="text" value={values.secondaryColor ?? ''} onChange={e => setForm({ ...form, secondaryColor: e.target.value })} data-testid="input-secondary-color" /></div><div className="rounded-xl border border-dashed border-border p-5 text-center"><ImagePlus className="mx-auto text-primary" size={25} /><p className="mt-2 text-sm font-bold">Logo e capa</p><p className="mt-1 text-xs text-muted-foreground">Adicione imagens que façam abrir o apetite.</p><Button variant="outline" className="mt-3" data-testid="button-upload-branding">Escolher imagens</Button></div></div></> : <><h2 className="font-bold">Dados do restaurante</h2><p className="mt-1 text-sm text-muted-foreground">Essas informações aparecem no seu cardápio público.</p><div className="mt-6 grid gap-4"><Field label="Nome do restaurante" value={values.name ?? ''} onChange={e => setForm({ ...form, name: e.target.value })} data-testid="input-settings-name" /><Field label="Telefone" value={values.phone ?? ''} onChange={e => setForm({ ...form, phone: e.target.value })} data-testid="input-settings-phone" /><Field label="WhatsApp" value={values.whatsapp ?? ''} onChange={e => setForm({ ...form, whatsapp: e.target.value })} data-testid="input-settings-whatsapp" /><Field label="Endereço" value={values.address ?? ''} onChange={e => setForm({ ...form, address: e.target.value })} data-testid="input-settings-address" /><div className="grid gap-4 sm:grid-cols-2"><Field label="Cidade" value={values.city ?? ''} onChange={e => setForm({ ...form, city: e.target.value })} data-testid="input-settings-city" /><Field label="Estado" value={values.state ?? ''} onChange={e => setForm({ ...form, state: e.target.value })} data-testid="input-settings-state" /></div></div></>}</div><div className="surface h-fit rounded-2xl p-5 sm:p-7"><h2 className="font-bold">Prévia</h2><p className="mt-1 text-sm text-muted-foreground">Veja como sua presença aparece para o cliente.</p><div className="mt-6 overflow-hidden rounded-2xl border border-border bg-background"><div className="h-24 bg-secondary" style={{ background: `linear-gradient(135deg, ${values.secondaryColor || '#294b49'}, ${values.primaryColor || '#e5582e'})` }} /><div className="relative px-4 pb-5"><div className="-mt-7 grid h-14 w-14 place-items-center rounded-2xl border-4 border-background bg-primary text-xl font-bold text-primary-foreground">{values.name?.slice(0, 1) || 'M'}</div><h3 className="mt-3 font-bold">{values.name || 'Seu restaurante'}</h3><p className="mt-1 text-xs text-muted-foreground">{values.description || 'Uma descrição gostosa sobre a sua casa.'}</p><div className="mt-5 grid gap-2"><div className="h-9 rounded-lg bg-muted" /><div className="h-9 rounded-lg bg-muted" /><div className="h-9 rounded-lg bg-muted" /></div></div></div></div></div></>; }
 
-function QRCodePage() { const { data } = useGetRestaurant({ query: { queryKey: getGetRestaurantQueryKey() } }); const url = `${window.location.origin}${basePath}/menu/${data?.slug ?? 'seu-restaurante'}`; return <><PageTitle eyebrow="presença digital" title="Divulgar cardápio" description="Um link simples para a mesa, bio, balcão ou porta da sua casa." /><div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]"><div className="rounded-2xl bg-secondary p-6 text-secondary-foreground sm:p-8"><div className="flex items-center justify-between"><div><div className="mono text-[10px] uppercase tracking-[.18em] text-accent">seu cardápio público</div><h2 className="display mt-3 text-3xl font-bold">{data?.name ?? 'Seu restaurante'}</h2></div><span className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground"><QrCode size={22} /></span></div><div className="mt-12 rounded-xl bg-[#f8f4e8] p-4 text-center text-secondary"><div className="mx-auto grid aspect-square max-w-[190px] place-items-center border-[12px] border-secondary bg-[#f8f4e8]"><QrCode size={130} strokeWidth={1.4} /></div><p className="mt-4 text-xs font-bold">Aponte a câmera e peça</p></div><div className="mt-6 flex gap-2"><Button variant="primary" className="flex-1" onClick={() => navigator.clipboard?.writeText(url)} data-testid="button-copy-menu-link"><Copy size={15} /> Copiar link</Button><Button variant="outline" className="border-secondary-foreground/20 bg-transparent text-secondary-foreground hover:bg-secondary-foreground/10" data-testid="button-share-menu"><Share2 size={16} /></Button></div></div><div className="surface rounded-2xl p-6 sm:p-8"><h2 className="font-bold">Onde usar</h2><p className="mt-1 text-sm text-muted-foreground">Seu cardápio merece aparecer onde seus clientes já estão.</p><div className="mt-7 grid gap-3">{[['Bio do Instagram', Instagram],['WhatsApp da casa', MessageCircle],['Mesa e balcão', Utensils],['Google Maps', MapPin]].map(([label, Icon]) => <div className="flex items-center gap-3 rounded-xl border border-border p-4" key={String(label)}><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary"><Icon size={17} /></span><span className="flex-1 text-sm font-bold">{label as string}</span><ChevronRight size={16} className="text-muted-foreground" /></div>)}</div><div className="mt-7 rounded-xl bg-muted p-4"><div className="flex items-center gap-2 text-xs font-bold"><Globe2 size={15} className="text-primary" /> Link do cardápio</div><p className="mt-2 truncate text-xs text-muted-foreground">{url}</p></div></div></div></>; }
+function QRCodePage() {
+  const { data, isLoading, isError } = useGetRestaurant({
+    query: { queryKey: getGetRestaurantQueryKey() },
+  });
+  const [feedback, setFeedback] = useState('');
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  if (isLoading) return <Loading lines={3} />;
+  if (isError || !data) return <ErrorState />;
+
+  const url = `${window.location.origin}${basePath}/menu/${data.slug}`;
+  const shareText = `Confira o cardápio de ${data.name}: ${url}`;
+  const mapsQuery = [data.name, data.address, data.city, data.state].filter(Boolean).join(', ');
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+
+  const copyText = async (text: string, successMessage: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          setFeedback(successMessage);
+          return;
+        } catch {
+          // Try the browser fallback below when clipboard permissions are denied.
+        }
+      }
+      const input = document.createElement('textarea');
+      input.value = text;
+      input.setAttribute('readonly', '');
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
+      input.select();
+      let copied = false;
+      try {
+        copied = document.execCommand('copy');
+      } finally {
+        input.remove();
+      }
+      if (!copied) throw new Error('Clipboard access is unavailable');
+      setFeedback(successMessage);
+    } catch {
+      setFeedback('Não foi possível copiar automaticamente. Selecione o link abaixo.');
+    }
+  };
+
+  const copyMenuLink = () => copyText(url, 'Link copiado. Cole-o na bio do Instagram ou onde preferir.');
+  const shareMenu = async () => {
+    if (!navigator.share) {
+      await copyMenuLink();
+      return;
+    }
+    try {
+      await navigator.share({ title: data.name, text: 'Confira nosso cardápio digital.', url });
+      setFeedback('Cardápio compartilhado.');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      await copyMenuLink();
+    }
+  };
+  const downloadQr = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas) {
+      setFeedback('O QR Code ainda está sendo preparado. Tente novamente.');
+      return;
+    }
+    const downloadLink = document.createElement('a');
+    downloadLink.href = canvas.toDataURL('image/png');
+    downloadLink.download = `${data.slug}-qr-code.png`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    setFeedback('QR Code baixado em PNG.');
+  };
+
+  const channels = [
+    {
+      label: 'Bio do Instagram',
+      action: 'Copiar link',
+      icon: Instagram,
+      onClick: () => void copyMenuLink(),
+      testId: 'button-promote-instagram',
+    },
+    {
+      label: 'WhatsApp da casa',
+      action: 'Abrir WhatsApp',
+      icon: MessageCircle,
+      href: whatsappUrl,
+      testId: 'link-promote-whatsapp',
+    },
+    {
+      label: 'Mesa e balcão',
+      action: 'Baixar QR',
+      icon: Utensils,
+      onClick: downloadQr,
+      testId: 'button-promote-print',
+    },
+    {
+      label: 'Google Maps',
+      action: 'Abrir mapa',
+      icon: MapPin,
+      href: mapsUrl,
+      testId: 'link-promote-maps',
+    },
+  ];
+
+  return <>
+    <PageTitle eyebrow="presença digital" title="Divulgar cardápio" description="Copie o link, compartilhe ou baixe o QR Code para sua casa." />
+    <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
+      <div className="rounded-2xl bg-secondary p-6 text-secondary-foreground sm:p-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="mono text-[10px] uppercase tracking-[.18em] text-accent">seu cardápio público</div>
+            <h2 className="display mt-3 text-3xl font-bold">{data.name}</h2>
+          </div>
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground"><QrCode size={22} /></span>
+        </div>
+        <div className="mt-8 rounded-xl bg-[#f8f4e8] p-4 text-center text-secondary">
+          <div className="mx-auto grid aspect-square w-full max-w-[190px] place-items-center overflow-hidden rounded-lg bg-white p-2">
+            <QRCodeCanvas
+              ref={qrCanvasRef}
+              value={url}
+              size={512}
+              level="H"
+              includeMargin
+              title={`QR Code do cardápio de ${data.name}`}
+              className="h-full w-full"
+            />
+          </div>
+          <p className="mt-4 text-xs font-bold">Aponte a câmera e peça</p>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <Button variant="primary" className="col-span-2" onClick={() => void copyMenuLink()} data-testid="button-copy-menu-link">
+            <Copy size={15} /> Copiar link
+          </Button>
+          <Button variant="outline" className="border-secondary-foreground/20 bg-transparent text-secondary-foreground hover:bg-secondary-foreground/10" onClick={() => void shareMenu()} data-testid="button-share-menu">
+            <Share2 size={16} /> Compartilhar
+          </Button>
+          <Button variant="outline" className="border-secondary-foreground/20 bg-transparent text-secondary-foreground hover:bg-secondary-foreground/10" onClick={downloadQr} data-testid="button-download-menu-qr">
+            <Download size={16} /> Baixar QR
+          </Button>
+        </div>
+        <p className="mt-3 min-h-5 text-xs text-secondary-foreground/70" role="status" aria-live="polite" data-testid="status-menu-sharing">{feedback}</p>
+      </div>
+
+      <div className="surface rounded-2xl p-6 sm:p-8">
+        <h2 className="font-bold">Onde usar</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Escolha um canal para compartilhar seu cardápio.</p>
+        <div className="mt-7 grid gap-3">
+          {channels.map(({ label, action, icon: Icon, href, onClick, testId }) => {
+            const content = <>
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary"><Icon size={17} /></span>
+              <span className="flex-1 text-left text-sm font-bold">{label}</span>
+              <span className="text-xs font-semibold text-primary">{action}</span>
+              <ChevronRight size={16} className="text-muted-foreground" />
+            </>;
+            return href
+              ? <a className="flex items-center gap-3 rounded-xl border border-border p-4 transition hover:border-primary/40 hover:bg-muted/40" href={href} key={label} target="_blank" rel="noreferrer" data-testid={testId}>{content}</a>
+              : <button className="flex items-center gap-3 rounded-xl border border-border p-4 transition hover:border-primary/40 hover:bg-muted/40" key={label} onClick={onClick} type="button" data-testid={testId}>{content}</button>;
+          })}
+        </div>
+        <div className="mt-7 rounded-xl bg-muted p-4">
+          <div className="flex items-center gap-2 text-xs font-bold"><Globe2 size={15} className="text-primary" /> Link do cardápio</div>
+          <p className="mt-2 break-all text-xs text-muted-foreground">{url}</p>
+        </div>
+      </div>
+    </div>
+  </>;
+}
 
 function Statistics() { const { data, isLoading, isError } = useGetDashboardSummary({ query: { queryKey: getGetDashboardSummaryQueryKey() } }); if (isLoading) return <><PageTitle eyebrow="inteligência da casa" title="Estatísticas" /><Loading lines={4} /></>; if (isError || !data) return <ErrorState />; return <><PageTitle eyebrow="inteligência da casa" title="Estatísticas" description="O que os números estão contando sobre o seu negócio." action={<button className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-bold" data-testid="button-statistics-period">Últimos 7 dias <ChevronDown size={14} /></button>} /><div className="grid gap-4 sm:grid-cols-3"><div className="surface rounded-2xl p-5"><p className="text-xs font-semibold text-muted-foreground">Faturamento no período</p><p className="display mt-3 text-3xl font-bold">{brl.format(data.weeklySales.reduce((a, b) => a + b.value, 0))}</p><p className="mt-2 text-xs font-bold text-secondary">+12,4% <span className="font-normal text-muted-foreground">vs. anterior</span></p></div><div className="surface rounded-2xl p-5"><p className="text-xs font-semibold text-muted-foreground">Ticket médio</p><p className="display mt-3 text-3xl font-bold">{brl.format(data.salesToday / Math.max(data.ordersToday, 1))}</p><p className="mt-2 text-xs font-bold text-secondary">saudável <span className="font-normal text-muted-foreground">para o seu perfil</span></p></div><div className="surface rounded-2xl p-5"><p className="text-xs font-semibold text-muted-foreground">Visualizações</p><p className="display mt-3 text-3xl font-bold">{data.menuViews}</p><p className="mt-2 text-xs font-bold text-secondary">+8,1% <span className="font-normal text-muted-foreground">vs. anterior</span></p></div></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><SalesChart points={data.weeklySales} /><TopProducts products={data.topProducts} /></div><div className="surface mt-5 rounded-2xl p-5 sm:p-7"><h2 className="font-bold">Leituras rápidas</h2><div className="mt-5 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-accent/20 p-4"><Flame className="text-primary" size={19} /><p className="mt-4 text-sm font-bold">{data.topProducts[0]?.name ?? 'Seu campeão'} lidera a semana</p><p className="mt-1 text-xs text-muted-foreground">Coloque em destaque no cardápio.</p></div><div className="rounded-xl bg-muted p-4"><Clock3 className="text-secondary" size={19} /><p className="mt-4 text-sm font-bold">Seu melhor horário é o almoço</p><p className="mt-1 text-xs text-muted-foreground">Prepare a equipe para esse pico.</p></div><div className="rounded-xl bg-primary/10 p-4"><Users className="text-primary" size={19} /><p className="mt-4 text-sm font-bold">{data.customersCount} clientes na base</p><p className="mt-1 text-xs text-muted-foreground">Uma boa hora para criar recorrência.</p></div></div></div></>; }
 
