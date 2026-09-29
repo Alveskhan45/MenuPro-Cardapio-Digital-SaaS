@@ -188,6 +188,7 @@ export interface ProductInput {
   isFeatured?: boolean;
   available?: boolean;
   position?: number;
+  addonGroups?: AddonGroup[];
 }
 
 export type OrderStatusInputStatus = typeof OrderStatusInputStatus[keyof typeof OrderStatusInputStatus];

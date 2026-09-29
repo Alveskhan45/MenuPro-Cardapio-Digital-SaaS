@@ -458,6 +458,10 @@ components:
         isFeatured: { type: boolean }
         available: { type: boolean }
         position: { type: integer }
+        addonGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/AddonGroup"
     AddonGroup:
       type: object
       required: [id, name, required, min, max, items]

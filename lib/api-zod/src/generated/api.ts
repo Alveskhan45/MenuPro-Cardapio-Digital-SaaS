@@ -262,7 +262,19 @@ export const CreateProductBody = zod.object({
   "isActive": zod.boolean().optional(),
   "isFeatured": zod.boolean().optional(),
   "available": zod.boolean().optional(),
-  "position": zod.number().int().optional()
+  "position": zod.number().int().optional(),
+  "addonGroups": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "required": zod.boolean(),
+  "min": zod.number().int(),
+  "max": zod.number().int(),
+  "items": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "price": zod.number()
+}))
+})).optional()
 })
 
 export const CreateProductResponse = zod.object({
@@ -317,7 +329,19 @@ export const UpdateProductBody = zod.object({
   "isActive": zod.boolean().optional(),
   "isFeatured": zod.boolean().optional(),
   "available": zod.boolean().optional(),
-  "position": zod.number().int().optional()
+  "position": zod.number().int().optional(),
+  "addonGroups": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "required": zod.boolean(),
+  "min": zod.number().int(),
+  "max": zod.number().int(),
+  "items": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "price": zod.number()
+}))
+})).optional()
 })
 
 export const UpdateProductResponse = zod.object({

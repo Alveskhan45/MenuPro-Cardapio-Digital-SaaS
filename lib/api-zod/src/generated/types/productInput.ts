@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AddonGroup } from './addonGroup';
 
 export interface ProductInput {
   categoryId: number;
@@ -24,4 +25,5 @@ export interface ProductInput {
   isFeatured?: boolean;
   available?: boolean;
   position?: number;
+  addonGroups?: AddonGroup[];
 }

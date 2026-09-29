@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type ErrorRequestHandler, type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
@@ -46,5 +46,22 @@ app.use(
 );
 
 app.use("/api", router);
+
+const apiErrorHandler: ErrorRequestHandler = (error, _req, res, next) => {
+  if (res.headersSent) return next(error);
+
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? error.status
+      : undefined;
+  if ((error instanceof Error && error.name === "ZodError") || status === 400) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+
+  logger.error({ err: error }, "Unhandled API error");
+  return res.status(500).json({ error: "Internal server error" });
+};
+
+app.use(apiErrorHandler);
 
 export default app;

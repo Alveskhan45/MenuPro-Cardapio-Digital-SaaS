@@ -1,4 +1,6 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type RequestHandler, type Response } from "express";
+import { getAuth } from "@clerk/express";
+import { createHash } from "node:crypto";
 import {
   and,
   asc,
@@ -49,7 +51,60 @@ import {
 } from "@workspace/db";
 
 const router: IRouter = Router();
-const DEMO_RESTAURANT_ID = 1;
+
+function getRestaurantId(res: Response): number {
+  const restaurantId = res.locals.restaurantId;
+  if (!Number.isInteger(restaurantId)) throw new Error("Restaurant context is missing");
+  return restaurantId as number;
+}
+
+const resolveRestaurant: RequestHandler = async (req, res, next) => {
+  try {
+    res.setHeader("Cache-Control", "private, no-store");
+    const userId = getAuth(req).userId;
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
+    let [restaurant] = await db
+      .select()
+      .from(restaurantsTable)
+      .where(eq(restaurantsTable.ownerClerkId, userId))
+      .limit(1);
+    if (!restaurant) {
+      const suffix = createHash("sha256").update(userId).digest("hex");
+      const slug = `restaurante-${suffix}`;
+      [restaurant] = await db
+        .insert(restaurantsTable)
+        .values({
+          ownerClerkId: userId,
+          name: "Meu restaurante",
+          slug,
+        })
+        .onConflictDoNothing({ target: restaurantsTable.slug })
+        .returning();
+      if (!restaurant) {
+        [restaurant] = await db
+          .select()
+          .from(restaurantsTable)
+          .where(eq(restaurantsTable.slug, slug))
+          .limit(1);
+      }
+    }
+    if (!restaurant || restaurant.ownerClerkId !== userId) {
+      return res.status(409).json({ error: "Unable to provision an owned restaurant" });
+    }
+    res.locals.restaurantId = restaurant.id;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+};
+
+router.use((req, res, next) => {
+  const isPublicMenuRead = req.method === "GET" && /^\/menu\/[^/]+$/.test(req.path);
+  const isPublicOrderCreate =
+    req.method === "POST" && /^\/menu\/[^/]+\/orders$/.test(req.path);
+  if (isPublicMenuRead || isPublicOrderCreate) return next();
+  return resolveRestaurant(req, res, next);
+});
 
 function normalizeRestaurant(restaurant: typeof restaurantsTable.$inferSelect) {
   return {
@@ -59,7 +114,7 @@ function normalizeRestaurant(restaurant: typeof restaurantsTable.$inferSelect) {
   };
 }
 
-async function getRestaurant(id = DEMO_RESTAURANT_ID) {
+async function getRestaurant(id: number) {
   const [restaurant] = await db
     .select()
     .from(restaurantsTable)
@@ -69,7 +124,16 @@ async function getRestaurant(id = DEMO_RESTAURANT_ID) {
   return restaurant;
 }
 
-async function getProductView(productId: number) {
+async function categoryBelongsToRestaurant(categoryId: number, restaurantId: number) {
+  const [category] = await db
+    .select({ id: categoriesTable.id })
+    .from(categoriesTable)
+    .where(and(eq(categoriesTable.id, categoryId), eq(categoriesTable.restaurantId, restaurantId)))
+    .limit(1);
+  return Boolean(category);
+}
+
+async function getProductView(productId: number, restaurantId: number) {
   const [product] = await db
     .select({
       id: productsTable.id,
@@ -87,8 +151,14 @@ async function getProductView(productId: number) {
       addonGroups: productsTable.addonGroups,
     })
     .from(productsTable)
-    .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
-    .where(and(eq(productsTable.id, productId), eq(productsTable.restaurantId, DEMO_RESTAURANT_ID)))
+    .innerJoin(
+      categoriesTable,
+      and(
+        eq(productsTable.categoryId, categoriesTable.id),
+        eq(categoriesTable.restaurantId, restaurantId),
+      ),
+    )
+    .where(and(eq(productsTable.id, productId), eq(productsTable.restaurantId, restaurantId)))
     .limit(1);
   return product;
 }
@@ -108,38 +178,40 @@ function whatsappLink(phone: string, message: string) {
 }
 
 router.get("/restaurant", async (_req, res) => {
-  const restaurant = await getRestaurant();
+  const restaurant = await getRestaurant(getRestaurantId(res));
   return res.json(GetRestaurantResponse.parse(normalizeRestaurant(restaurant)));
 });
 
 router.patch("/restaurant", async (req, res) => {
   const input = UpdateRestaurantBody.parse(req.body);
+  const restaurantId = getRestaurantId(res);
   const [restaurant] = await db
     .update(restaurantsTable)
     .set({ ...input, updatedAt: new Date() })
-    .where(eq(restaurantsTable.id, DEMO_RESTAURANT_ID))
+    .where(eq(restaurantsTable.id, restaurantId))
     .returning();
   if (!restaurant) return res.status(404).json({ error: "Restaurant not found" });
   return res.json(UpdateRestaurantResponse.parse(normalizeRestaurant(restaurant)));
 });
 
 router.get("/dashboard/summary", async (_req, res) => {
+  const restaurantId = getRestaurantId(res);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const [restaurant] = await db.select().from(restaurantsTable).where(eq(restaurantsTable.id, DEMO_RESTAURANT_ID));
+  const [restaurant] = await db.select().from(restaurantsTable).where(eq(restaurantsTable.id, restaurantId));
   const allOrders = await db
     .select()
     .from(ordersTable)
-    .where(eq(ordersTable.restaurantId, DEMO_RESTAURANT_ID))
+    .where(eq(ordersTable.restaurantId, restaurantId))
     .orderBy(desc(ordersTable.time));
   const [productTotal] = await db
     .select({ value: count(productsTable.id) })
     .from(productsTable)
-    .where(eq(productsTable.restaurantId, DEMO_RESTAURANT_ID));
+    .where(eq(productsTable.restaurantId, restaurantId));
   const [customerTotal] = await db
     .select({ value: count(customersTable.id) })
     .from(customersTable)
-    .where(eq(customersTable.restaurantId, DEMO_RESTAURANT_ID));
+    .where(eq(customersTable.restaurantId, restaurantId));
   const todayOrders = allOrders.filter((order) => order.time >= today);
   const pendingStatuses = new Set(["new", "confirmed", "preparing", "ready", "delivering"]);
   const topMap = new Map<number, { id: number; name: string; quantity: number; revenue: number; imageUrl: string | null }>();
@@ -183,6 +255,7 @@ router.get("/dashboard/summary", async (_req, res) => {
 });
 
 router.get("/categories", async (_req, res) => {
+  const restaurantId = getRestaurantId(res);
   const categories = await db
     .select({
       id: categoriesTable.id,
@@ -194,8 +267,14 @@ router.get("/categories", async (_req, res) => {
       productCount: count(productsTable.id),
     })
     .from(categoriesTable)
-    .leftJoin(productsTable, eq(productsTable.categoryId, categoriesTable.id))
-    .where(eq(categoriesTable.restaurantId, DEMO_RESTAURANT_ID))
+    .leftJoin(
+      productsTable,
+      and(
+        eq(productsTable.categoryId, categoriesTable.id),
+        eq(productsTable.restaurantId, restaurantId),
+      ),
+    )
+    .where(eq(categoriesTable.restaurantId, restaurantId))
     .groupBy(categoriesTable.id)
     .orderBy(asc(categoriesTable.position));
   return res.json(ListCategoriesResponse.parse(categories.map((category) => ({ ...category, productCount: Number(category.productCount) }))));
@@ -203,9 +282,10 @@ router.get("/categories", async (_req, res) => {
 
 router.post("/categories", async (req, res) => {
   const input = CreateCategoryBody.parse(req.body);
+  const restaurantId = getRestaurantId(res);
   const [category] = await db
     .insert(categoriesTable)
-    .values({ ...input, restaurantId: DEMO_RESTAURANT_ID })
+    .values({ ...input, restaurantId })
     .returning();
   return res.status(201).json({
     ...category,
@@ -217,21 +297,26 @@ router.post("/categories", async (req, res) => {
 router.patch("/categories/:categoryId", async (req, res) => {
   const { categoryId } = UpdateCategoryParams.parse(req.params);
   const input = UpdateCategoryBody.parse(req.body);
+  const restaurantId = getRestaurantId(res);
   const [category] = await db
     .update(categoriesTable)
     .set({ ...input, updatedAt: new Date() })
-    .where(and(eq(categoriesTable.id, categoryId), eq(categoriesTable.restaurantId, DEMO_RESTAURANT_ID)))
+    .where(and(eq(categoriesTable.id, categoryId), eq(categoriesTable.restaurantId, restaurantId)))
     .returning();
   if (!category) return res.status(404).json({ error: "Category not found" });
-  const [productTotal] = await db.select({ value: count(productsTable.id) }).from(productsTable).where(eq(productsTable.categoryId, categoryId));
+  const [productTotal] = await db
+    .select({ value: count(productsTable.id) })
+    .from(productsTable)
+    .where(and(eq(productsTable.categoryId, categoryId), eq(productsTable.restaurantId, restaurantId)));
   return res.json({ ...category, productCount: Number(productTotal?.value ?? 0), imageUrl: category.imageUrl ?? null });
 });
 
 router.delete("/categories/:categoryId", async (req, res) => {
   const { categoryId } = DeleteCategoryParams.parse(req.params);
+  const restaurantId = getRestaurantId(res);
   const [category] = await db
     .delete(categoriesTable)
-    .where(and(eq(categoriesTable.id, categoryId), eq(categoriesTable.restaurantId, DEMO_RESTAURANT_ID)))
+    .where(and(eq(categoriesTable.id, categoryId), eq(categoriesTable.restaurantId, restaurantId)))
     .returning({ id: categoriesTable.id });
   if (!category) return res.status(404).json({ error: "Category not found" });
   return res.status(204).send();
@@ -239,7 +324,8 @@ router.delete("/categories/:categoryId", async (req, res) => {
 
 router.get("/products", async (req, res) => {
   const query = ListProductsQueryParams.parse(req.query);
-  const conditions = [eq(productsTable.restaurantId, DEMO_RESTAURANT_ID)];
+  const restaurantId = getRestaurantId(res);
+  const conditions = [eq(productsTable.restaurantId, restaurantId)];
   if (query.categoryId) conditions.push(eq(productsTable.categoryId, query.categoryId));
   if (query.status === "active") conditions.push(eq(productsTable.isActive, true));
   if (query.status === "inactive") conditions.push(eq(productsTable.isActive, false));
@@ -263,7 +349,13 @@ router.get("/products", async (req, res) => {
       addonGroups: productsTable.addonGroups,
     })
     .from(productsTable)
-    .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
+    .innerJoin(
+      categoriesTable,
+      and(
+        eq(productsTable.categoryId, categoriesTable.id),
+        eq(categoriesTable.restaurantId, restaurantId),
+      ),
+    )
     .where(and(...conditions))
     .orderBy(asc(productsTable.position), asc(productsTable.id));
   return res.json(ListProductsResponse.parse(products.map((product) => ({ ...product, imageUrl: product.imageUrl ?? null, promotionalPrice: product.promotionalPrice ?? null }))));
@@ -271,37 +363,46 @@ router.get("/products", async (req, res) => {
 
 router.post("/products", async (req, res) => {
   const input = CreateProductBody.parse(req.body);
+  const restaurantId = getRestaurantId(res);
+  if (!(await categoryBelongsToRestaurant(input.categoryId, restaurantId))) {
+    return res.status(400).json({ error: "Category not found" });
+  }
   const [product] = await db
     .insert(productsTable)
     .values({
       ...input,
-      restaurantId: DEMO_RESTAURANT_ID,
-      addonGroups: [],
+      restaurantId,
+      addonGroups: input.addonGroups ?? [],
       promotionalPrice: input.promotionalPrice ?? null,
       imageUrl: input.imageUrl ?? null,
     })
     .returning();
-  const view = await getProductView(product.id);
+  const view = await getProductView(product.id, restaurantId);
   return res.status(201).json(view);
 });
 
 router.patch("/products/:productId", async (req, res) => {
   const { productId } = UpdateProductParams.parse(req.params);
   const input = UpdateProductBody.parse(req.body);
+  const restaurantId = getRestaurantId(res);
+  if (!(await categoryBelongsToRestaurant(input.categoryId, restaurantId))) {
+    return res.status(400).json({ error: "Category not found" });
+  }
   const [product] = await db
     .update(productsTable)
     .set({ ...input, updatedAt: new Date(), promotionalPrice: input.promotionalPrice ?? null, imageUrl: input.imageUrl ?? null })
-    .where(and(eq(productsTable.id, productId), eq(productsTable.restaurantId, DEMO_RESTAURANT_ID)))
+    .where(and(eq(productsTable.id, productId), eq(productsTable.restaurantId, restaurantId)))
     .returning();
   if (!product) return res.status(404).json({ error: "Product not found" });
-  return res.json(await getProductView(product.id));
+  return res.json(await getProductView(product.id, restaurantId));
 });
 
 router.delete("/products/:productId", async (req, res) => {
   const { productId } = DeleteProductParams.parse(req.params);
+  const restaurantId = getRestaurantId(res);
   const [product] = await db
     .delete(productsTable)
-    .where(and(eq(productsTable.id, productId), eq(productsTable.restaurantId, DEMO_RESTAURANT_ID)))
+    .where(and(eq(productsTable.id, productId), eq(productsTable.restaurantId, restaurantId)))
     .returning({ id: productsTable.id });
   if (!product) return res.status(404).json({ error: "Product not found" });
   return res.status(204).send();
@@ -309,7 +410,7 @@ router.delete("/products/:productId", async (req, res) => {
 
 router.get("/orders", async (req, res) => {
   const query = ListOrdersQueryParams.parse(req.query);
-  const conditions = [eq(ordersTable.restaurantId, DEMO_RESTAURANT_ID)];
+  const conditions = [eq(ordersTable.restaurantId, getRestaurantId(res))];
   if (query.status && query.status !== "all") conditions.push(eq(ordersTable.status, query.status));
   const orders = await db
     .select()
@@ -323,10 +424,11 @@ router.get("/orders", async (req, res) => {
 router.patch("/orders/:orderId/status", async (req, res) => {
   const { orderId } = UpdateOrderStatusParams.parse(req.params);
   const { status } = UpdateOrderStatusBody.parse(req.body);
+  const restaurantId = getRestaurantId(res);
   const [order] = await db
     .update(ordersTable)
     .set({ status, updatedAt: new Date() })
-    .where(and(eq(ordersTable.id, orderId), eq(ordersTable.restaurantId, DEMO_RESTAURANT_ID)))
+    .where(and(eq(ordersTable.id, orderId), eq(ordersTable.restaurantId, restaurantId)))
     .returning();
   if (!order) return res.status(404).json({ error: "Order not found" });
   return res.json(normalizeOrder(order));
@@ -334,7 +436,7 @@ router.patch("/orders/:orderId/status", async (req, res) => {
 
 router.get("/customers", async (req, res) => {
   const query = ListCustomersQueryParams.parse(req.query);
-  const conditions = [eq(customersTable.restaurantId, DEMO_RESTAURANT_ID)];
+  const conditions = [eq(customersTable.restaurantId, getRestaurantId(res))];
   if (query.search) conditions.push(or(ilike(customersTable.name, `%${query.search}%`), ilike(customersTable.whatsapp, `%${query.search}%`))!);
   const customers = await db
     .select()
@@ -354,8 +456,36 @@ router.get("/menu/:slug", async (req, res) => {
   if (!restaurant) return res.status(404).json({ error: "Menu not found" });
   await db.update(restaurantsTable).set({ menuViews: sql`${restaurantsTable.menuViews} + 1` }).where(eq(restaurantsTable.id, restaurant.id));
   const categories = await db.select({ id: categoriesTable.id, name: categoriesTable.name, description: categoriesTable.description, imageUrl: categoriesTable.imageUrl, isActive: categoriesTable.isActive, position: categoriesTable.position }).from(categoriesTable).where(and(eq(categoriesTable.restaurantId, restaurant.id), eq(categoriesTable.isActive, true))).orderBy(asc(categoriesTable.position));
-  const products = await db.select({ id: productsTable.id, categoryId: productsTable.categoryId, categoryName: categoriesTable.name, name: productsTable.name, description: productsTable.description, price: productsTable.price, promotionalPrice: productsTable.promotionalPrice, imageUrl: productsTable.imageUrl, isActive: productsTable.isActive, isFeatured: productsTable.isFeatured, available: productsTable.available, position: productsTable.position, addonGroups: productsTable.addonGroups }).from(productsTable).innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id)).where(and(eq(productsTable.restaurantId, restaurant.id), eq(productsTable.isActive, true), eq(productsTable.available, true))).orderBy(asc(productsTable.position));
-  return res.json({ restaurant: normalizeRestaurant(restaurant), categories: categories.map((category) => ({ ...category, productCount: products.filter((product) => product.categoryId === category.id).length, imageUrl: category.imageUrl ?? null })), products: products.map((product) => ({ ...product, imageUrl: product.imageUrl ?? null, promotionalPrice: product.promotionalPrice ?? null })) });
+  const products = await db.select({ id: productsTable.id, categoryId: productsTable.categoryId, categoryName: categoriesTable.name, name: productsTable.name, description: productsTable.description, price: productsTable.price, promotionalPrice: productsTable.promotionalPrice, imageUrl: productsTable.imageUrl, isActive: productsTable.isActive, isFeatured: productsTable.isFeatured, available: productsTable.available, position: productsTable.position, addonGroups: productsTable.addonGroups }).from(productsTable).innerJoin(categoriesTable, and(eq(productsTable.categoryId, categoriesTable.id), eq(categoriesTable.restaurantId, restaurant.id))).where(and(eq(productsTable.restaurantId, restaurant.id), eq(productsTable.isActive, true), eq(productsTable.available, true))).orderBy(asc(productsTable.position));
+  return res.json({
+    restaurant: {
+      id: restaurant.id,
+      name: restaurant.name,
+      slug: restaurant.slug,
+      description: restaurant.description,
+      phone: restaurant.phone,
+      whatsapp: restaurant.whatsapp,
+      address: restaurant.address,
+      city: restaurant.city,
+      state: restaurant.state,
+      logoUrl: restaurant.logoUrl,
+      bannerUrl: restaurant.bannerUrl,
+      primaryColor: restaurant.primaryColor,
+      secondaryColor: restaurant.secondaryColor,
+      isOpen: restaurant.isOpen,
+      isPublished: restaurant.isPublished,
+    },
+    categories: categories.map((category) => ({
+      ...category,
+      productCount: products.filter((product) => product.categoryId === category.id).length,
+      imageUrl: category.imageUrl ?? null,
+    })),
+    products: products.map((product) => ({
+      ...product,
+      imageUrl: product.imageUrl ?? null,
+      promotionalPrice: product.promotionalPrice ?? null,
+    })),
+  });
 });
 
 router.post("/menu/:slug/orders", async (req, res) => {
@@ -364,13 +494,58 @@ router.post("/menu/:slug/orders", async (req, res) => {
   const [restaurant] = await db.select().from(restaurantsTable).where(and(eq(restaurantsTable.slug, slug), eq(restaurantsTable.isPublished, true))).limit(1);
   if (!restaurant) return res.status(404).json({ error: "Menu not found" });
   const productIds = input.items.map((item) => item.productId);
-  const products = await db.select({ id: productsTable.id, name: productsTable.name, price: productsTable.price, promotionalPrice: productsTable.promotionalPrice, imageUrl: productsTable.imageUrl, addonGroups: productsTable.addonGroups }).from(productsTable).where(and(eq(productsTable.restaurantId, restaurant.id), inArray(productsTable.id, productIds)));
+  const products = await db
+    .select({
+      id: productsTable.id,
+      name: productsTable.name,
+      price: productsTable.price,
+      promotionalPrice: productsTable.promotionalPrice,
+      imageUrl: productsTable.imageUrl,
+      addonGroups: productsTable.addonGroups,
+    })
+    .from(productsTable)
+    .innerJoin(
+      categoriesTable,
+      and(
+        eq(productsTable.categoryId, categoriesTable.id),
+        eq(categoriesTable.restaurantId, restaurant.id),
+        eq(categoriesTable.isActive, true),
+      ),
+    )
+    .where(
+      and(
+        eq(productsTable.restaurantId, restaurant.id),
+        eq(productsTable.isActive, true),
+        eq(productsTable.available, true),
+        inArray(productsTable.id, productIds),
+      ),
+    );
   const productMap = new Map(products.map((product) => [product.id, product]));
   const items: OrderItemData[] = [];
   for (const item of input.items) {
     const product = productMap.get(item.productId);
     if (!product) return res.status(400).json({ error: "One of the selected products is unavailable" });
-    const selectedAddons: Addon[] = (product.addonGroups ?? []).flatMap((group: AddonGroup) => group.items).filter((addon) => item.addonIds?.includes(addon.id));
+    const requestedAddonIds = item.addonIds ?? [];
+    const requestedAddonSet = new Set(requestedAddonIds);
+    if (requestedAddonSet.size !== requestedAddonIds.length) {
+      return res.status(400).json({ error: "Invalid add-on selection" });
+    }
+    const selectedAddons: Addon[] = [];
+    const matchedAddonIds = new Set<number>();
+    for (const group of product.addonGroups ?? []) {
+      const groupSelections = group.items.filter((addon) => requestedAddonSet.has(addon.id));
+      const minimum = group.required ? Math.max(1, group.min) : group.min;
+      if (groupSelections.length < minimum || groupSelections.length > group.max) {
+        return res.status(400).json({ error: "Invalid add-on selection" });
+      }
+      for (const addon of groupSelections) {
+        selectedAddons.push(addon);
+        matchedAddonIds.add(addon.id);
+      }
+    }
+    if (matchedAddonIds.size !== requestedAddonSet.size) {
+      return res.status(400).json({ error: "Invalid add-on selection" });
+    }
     const unitPrice = Number(product.promotionalPrice ?? product.price) + selectedAddons.reduce((sum, addon) => sum + Number(addon.price), 0);
     items.push({ productId: product.id, imageUrl: product.imageUrl ?? null, name: product.name, quantity: item.quantity, price: unitPrice, subtotal: unitPrice * item.quantity, addons: selectedAddons });
   }
