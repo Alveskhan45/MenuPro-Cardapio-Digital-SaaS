@@ -37,8 +37,14 @@ jobs:
       # O install funciona no ubuntu: os overrides do pnpm-workspace.yaml zeram os
       # binarios nativos de toda plataforma menos linux-x64-gnu, que e o runner
       # daqui. (No Windows local os mesmos overrides quebram o vite -- ver README.)
+      #
+      # strict-dep-builds: o pnpm 11 trata build scripts nao aprovados em
+      # onlyBuiltDependencies como erro (ERR_PNPM_IGNORED_BUILDS). A lista do
+      # pnpm-workspace.yaml cobre esbuild mas nao @clerk/shared. Os binarios
+      # nativos chegam como optionalDependency (@esbuild/linux-x64), entao
+      # dispensam o postinstall.
       - name: Instalar dependencias
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
 
       - name: Build do front
         env:
