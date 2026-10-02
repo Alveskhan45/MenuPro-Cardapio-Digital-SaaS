@@ -34,43 +34,11 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      # Duas coisas atrapalham o install no CI:
-      # 1. o preinstall do repo usa sh (Unix) -- funciona aqui, quebra no Windows;
-      # 2. o pnpm 11 aborta em politicas de supply-chain / build scripts quando
-      #    nao ha cache local de verificacao, que e sempre o caso num runner novo.
-      # Por isso o step tem um encadeamento de tentativas e joga o log no resumo
-      # do job, que aparece na pagina publica do run mesmo sem login.
+      # O install funciona no ubuntu: os overrides do pnpm-workspace.yaml zeram os
+      # binarios nativos de toda plataforma menos linux-x64-gnu, que e o runner
+      # daqui. (No Windows local os mesmos overrides quebram o vite -- ver README.)
       - name: Instalar dependencias
-        run: |
-          set -o pipefail
-          summary="$GITHUB_STEP_SUMMARY"
-          try() {
-            echo "### tentativa: pnpm install $*" >> "$summary"
-            echo '```' >> "$summary"
-            if pnpm install "$@" 2>&1 | tee install-attempt.log; then
-              echo '```' >> "$summary"
-              return 0
-            fi
-            echo '```' >> "$summary"
-            tail -n 40 install-attempt.log >> "$summary"
-            return 1
-          }
-          ok=0
-          try --frozen-lockfile \
-            --config.strict-dep-builds=false \
-            --config.minimum-release-age=0 || ok=1
-          if [ "$ok" = 1 ]; then
-            try --no-frozen-lockfile \
-              --config.strict-dep-builds=false \
-              --config.minimum-release-age=0 || ok=1
-          fi
-          if [ "$ok" = 1 ]; then
-            echo "### fallback final: --ignore-scripts" >> "$summary"
-            try --no-frozen-lockfile --ignore-scripts \
-              --config.strict-dep-builds=false \
-              --config.minimum-release-age=0 || ok=1
-          fi
-          [ "$ok" = 0 ] && exit 1
+        run: pnpm install --frozen-lockfile
 
       - name: Build do front
         env:
