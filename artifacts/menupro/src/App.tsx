@@ -1,4 +1,4 @@
-import { type ButtonHTMLAttributes, type ComponentType, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useMemo, useRef, useState } from 'react';
+import { type ButtonHTMLAttributes, type ComponentType, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk, useUser } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
@@ -21,6 +21,7 @@ import {
   useUpdateRestaurant,
   type Category, type Customer, type Order, type Product, type PublicMenu, type Restaurant
 } from '@workspace/api-client-react';
+import { setBaseUrl } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -28,8 +29,15 @@ import { QRCodeCanvas } from 'qrcode.react';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+const clerkPubKeyEnv = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+/* publishableKeyFromHost() inventa uma key "clerk.localhost" quando nao ha
+   VITE_CLERK_PUBLISHABLE_KEY, e o ClerkProvider explode no boot deixando a
+   pagina inteira branca. Sem key nao ha sessao nem dado: mostra o motivo. */
+const clerkPubKey = clerkPubKeyEnv || publishableKeyFromHost(window.location.hostname, undefined);
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const apiBaseUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') || null;
+if (apiBaseUrl) setBaseUrl(apiBaseUrl);
+const demoMode = import.meta.env.VITE_DEMO_MODE === 'true';
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const date = (value: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 const stripBase = (path: string) => basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
@@ -469,6 +477,31 @@ function PublicOrder() {
 
 function AppRoutes() { return <Switch><Route path="/" component={Home} /><Route path="/precos" component={Pricing} /><Route path="/login" component={() => <AuthEntry />} /><Route path="/cadastro" component={() => <AuthEntry signup />} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/menu/:slug/pedido" component={PublicOrder} /><Route path="/menu/:slug" component={PublicMenu} /><Route path="/onboarding"><RequireAuth><Onboarding /></RequireAuth></Route><Route path="/dashboard"><RequireAuth><PortalShell><Dashboard /></PortalShell></RequireAuth></Route><Route path="/pedidos"><RequireAuth><PortalShell><Orders /></PortalShell></RequireAuth></Route><Route path="/produtos"><RequireAuth><PortalShell><Products /></PortalShell></RequireAuth></Route><Route path="/categorias"><RequireAuth><PortalShell><Categories /></PortalShell></RequireAuth></Route><Route path="/clientes"><RequireAuth><PortalShell><Customers /></PortalShell></RequireAuth></Route><Route path="/aparencia"><RequireAuth><PortalShell><RestaurantForm mode="appearance" /></PortalShell></RequireAuth></Route><Route path="/configuracoes"><RequireAuth><PortalShell><RestaurantForm mode="settings" /></PortalShell></RequireAuth></Route><Route path="/qrcode"><RequireAuth><PortalShell><QRCodePage /></PortalShell></RequireAuth></Route><Route path="/estatisticas"><RequireAuth><PortalShell><Statistics /></PortalShell></RequireAuth></Route><Route component={() => <div className="grid min-h-[100dvh] place-items-center p-6 text-center"><div><h1 className="display text-6xl font-bold text-primary">404</h1><p className="mt-3 text-muted-foreground">Essa página saiu para entrega.</p><Link href="/" className="mt-6 inline-flex text-sm font-bold text-primary" data-testid="link-notfound-home">Voltar para o início <ArrowRight className="ml-2" size={15} /></Link></div></div>} /></Switch>; }
 
-function ClerkApp() { const [, setLocation] = useLocation(); return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={{ theme: shadcn, cssLayerName: 'clerk', options: { logoPlacement: 'inside', logoLinkUrl: basePath || '/', logoImageUrl: `${window.location.origin}${basePath}/logo.svg` }, variables: { colorPrimary: '#e5582e', colorForeground: '#294b49', colorMutedForeground: '#687674', colorBackground: '#fffdf6', colorInput: '#f8f4e8', colorInputForeground: '#294b49', colorDanger: '#c94a43', colorNeutral: '#d9d2c2', fontFamily: 'Plus Jakarta Sans', borderRadius: '12px' } }} localization={{ signIn: { start: { title: 'Bom te ver de novo', subtitle: 'Entre para cuidar da sua casa' } }, signUp: { start: { title: 'Crie seu espaço', subtitle: 'Seu cardápio começa aqui' } } }} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} routerPush={to => setLocation(stripBase(to))} routerReplace={to => setLocation(stripBase(to))}><AppRoutes /></ClerkProvider>; }
+function MissingConfig() {
+  return <div className="grid min-h-[100dvh] place-items-center bg-background p-6">
+    <div className="max-w-lg space-y-4 text-center">
+      <h1 className="display text-3xl font-bold tracking-[-.05em] text-primary">Falta configuracao</h1>
+      <p className="text-sm leading-6 text-muted-foreground">O app inteiro sobe dentro do Clerk, entao sem a chave publica nao ha sessao, cardapio nem login. Crie um app em <span className="font-bold text-foreground">dashboard.clerk.com</span> e copie <span className="font-bold text-foreground">.env.example</span> para <span className="font-bold text-foreground">.env</span> em <span className="font-bold text-foreground">artifacts/menupro</span>.</p>
+      <pre className="overflow-x-auto rounded-xl bg-secondary/60 p-3 text-left text-xs text-foreground">VITE_CLERK_PUBLISHABLE_KEY=pk_test_...</pre>
+      <p className="text-xs text-muted-foreground">A API (artifacts/api-server) tambem precisa de CLERK_SECRET_KEY e DATABASE_URL para devolver produtos e pedidos.</p>
+    </div>
+  </div>;
+}
+function ClerkApp() { const [, setLocation] = useLocation();
+  useEffect(() => {
+    /* O 404.html do Pages salvou a URL original antes de recarregar em
+       index.html; devolve o usuario para a rota que ele queria. */
+    const saved = sessionStorage.getItem('menupro:redirect');
+    if (!saved) return;
+    sessionStorage.removeItem('menupro:redirect');
+    try {
+      const target = new URL(saved);
+      const wanted = target.pathname.replace(new RegExp(`^${basePath}`), '') || '/';
+      if (wanted && wanted !== '/' && wanted !== location.pathname.replace(new RegExp(`^${basePath}`), '')) {
+        setLocation(wanted, { replace: true });
+      }
+    } catch { /* URL invalida: fica na raiz */ }
+  }, [setLocation]);
+  if (!demoMode && !clerkPubKeyEnv && !clerkProxyUrl) return <MissingConfig />; return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={{ theme: shadcn, cssLayerName: 'clerk', options: { logoPlacement: 'inside', logoLinkUrl: basePath || '/', logoImageUrl: `${window.location.origin}${basePath}/logo.svg` }, variables: { colorPrimary: '#e5582e', colorForeground: '#294b49', colorMutedForeground: '#687674', colorBackground: '#fffdf6', colorInput: '#f8f4e8', colorInputForeground: '#294b49', colorDanger: '#c94a43', colorNeutral: '#d9d2c2', fontFamily: 'Plus Jakarta Sans', borderRadius: '12px' } }} localization={{ signIn: { start: { title: 'Bom te ver de novo', subtitle: 'Entre para cuidar da sua casa' } }, signUp: { start: { title: 'Crie seu espaco', subtitle: 'Seu cardapio comeca aqui' } } }} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} routerPush={to => setLocation(stripBase(to))} routerReplace={to => setLocation(stripBase(to))}><AppRoutes /></ClerkProvider>; }
 function App() { return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={basePath}><ErrorBoundary><ClerkApp /></ErrorBoundary></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>; }
 export default App;

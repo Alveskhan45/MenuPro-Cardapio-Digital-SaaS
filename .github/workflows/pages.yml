@@ -1,0 +1,67 @@
+name: Deploy front no GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'artifacts/menupro/**'
+      - 'lib/api-client-react/**'
+      - 'lib/api-zod/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # O lockfile foi gerado no Replit com overrides que zeram todos os
+      # binarios nativos nao-Linux. No Linux o install passa, mas a chave publica
+      # do Clerk precisa existir no build: sem ela a pagina fica em branco.
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Build do front
+        env:
+          # Site de projeto: o base tem que incluir o nome do repo.
+          BASE_PATH: /Pro-Cardapio-Digital-SaaS/
+          PORT: 3002
+          NODE_ENV: production
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: pnpm --filter @workspace/menupro run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/menupro/dist/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
