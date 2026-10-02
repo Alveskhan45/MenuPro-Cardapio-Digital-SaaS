@@ -1,9 +1,28 @@
 import path from 'path';
+import { copyFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
+
+/* O GitHub Pages nao tem fallback de SPA: /menu/qualquer-coisa devolve 404.
+   Copiar o index.html para 404.html faz o app subir em qualquer caminho, e o
+   roteador decide a pagina. Um 404.html com redirect por JS nao resolve: o
+   caminho da base (/<repo>/) so e conhecido no build. */
+function spaFallback(): Plugin {
+  return {
+    name: 'menupro:spa-fallback',
+    apply: 'build',
+    closeBundle() {
+      const outDir = path.resolve(import.meta.dirname, 'dist/public');
+      copyFileSync(
+        path.join(outDir, 'index.html'),
+        path.join(outDir, '404.html'),
+      );
+    },
+  };
+}
 
 const rawPort = process.env.PORT;
 
@@ -62,6 +81,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    spaFallback(),
     ...(process.env.NODE_ENV !== 'production' &&
     process.env.REPL_ID !== undefined
       ? [

@@ -1,4 +1,4 @@
-import { type ButtonHTMLAttributes, type ComponentType, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useEffect, useMemo, useRef, useState } from 'react';
+import { type ButtonHTMLAttributes, type ComponentType, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk, useUser } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
@@ -488,20 +488,6 @@ function MissingConfig() {
   </div>;
 }
 function ClerkApp() { const [, setLocation] = useLocation();
-  useEffect(() => {
-    /* O 404.html do Pages salvou a URL original antes de recarregar em
-       index.html; devolve o usuario para a rota que ele queria. */
-    const saved = sessionStorage.getItem('menupro:redirect');
-    if (!saved) return;
-    sessionStorage.removeItem('menupro:redirect');
-    try {
-      const target = new URL(saved);
-      const wanted = target.pathname.replace(new RegExp(`^${basePath}`), '') || '/';
-      if (wanted && wanted !== '/' && wanted !== location.pathname.replace(new RegExp(`^${basePath}`), '')) {
-        setLocation(wanted, { replace: true });
-      }
-    } catch { /* URL invalida: fica na raiz */ }
-  }, [setLocation]);
   if (!demoMode && !clerkPubKeyEnv && !clerkProxyUrl) return <MissingConfig />; return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={{ theme: shadcn, cssLayerName: 'clerk', options: { logoPlacement: 'inside', logoLinkUrl: basePath || '/', logoImageUrl: `${window.location.origin}${basePath}/logo.svg` }, variables: { colorPrimary: '#e5582e', colorForeground: '#294b49', colorMutedForeground: '#687674', colorBackground: '#fffdf6', colorInput: '#f8f4e8', colorInputForeground: '#294b49', colorDanger: '#c94a43', colorNeutral: '#d9d2c2', fontFamily: 'Plus Jakarta Sans', borderRadius: '12px' } }} localization={{ signIn: { start: { title: 'Bom te ver de novo', subtitle: 'Entre para cuidar da sua casa' } }, signUp: { start: { title: 'Crie seu espaco', subtitle: 'Seu cardapio comeca aqui' } } }} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} routerPush={to => setLocation(stripBase(to))} routerReplace={to => setLocation(stripBase(to))}><AppRoutes /></ClerkProvider>; }
 function App() { return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={basePath}><ErrorBoundary><ClerkApp /></ErrorBoundary></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>; }
 export default App;
